@@ -101,7 +101,7 @@ describe(CONTRACT_NAME, function () {
           value: eth2Wei(depositAmountInEth)
         })
       )
-        .emit(contract, "Depsoit")
+        .emit(contract, "Deposit")
         .withArgs(
           user1.address,
           eth2Wei(depositAmountInEth),

@@ -13,7 +13,7 @@ contract XstroVault is BlastYieldConfig, ReentrancyGuard {
   uint256 public totalStaking;
   bool public isWithdrawalAllowed;
 
-  event Depsoit(address sender, uint256 amount, uint256 contractBalance);
+  event Deposit(address sender, uint256 amount, uint256 contractBalance);
   event Withdrawal(address staker, uint256 amount, uint256 contractBalance);
   event SetMinWithdrawalInterval(uint256 sec);
   event WithdrawalOn();
@@ -56,7 +56,7 @@ contract XstroVault is BlastYieldConfig, ReentrancyGuard {
     balances[msg.sender] += msg.value;
     stakingTimestamp[msg.sender] = block.timestamp;
     totalStaking += msg.value;
-    emit Depsoit(msg.sender, msg.value, address(this).balance);
+    emit Deposit(msg.sender, msg.value, address(this).balance);
   }
 
   function _withdrawal() internal {
