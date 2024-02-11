@@ -37,8 +37,11 @@ contract XstroVault is BlastYieldConfig, ReentrancyGuard {
     }
   }
 
-  function totalYield() public view returns (uint256) {
-    return address(this).balance - totalStaking;
+  function totalYield() public view returns (uint256[] memory) {
+    uint256[] memory out = new uint256[](2);
+    out[0] = block.number;
+    out[1] = address(this).balance - totalStaking;
+    return out;
   }
 
   function userStake(address addr_) external view returns (uint256[] memory) {
@@ -74,7 +77,7 @@ contract XstroVault is BlastYieldConfig, ReentrancyGuard {
   }
 
   function withdrawalYield() external nonReentrant onlyOwner {
-    uint256 yield = totalYield();
+    uint256 yield = totalYield()[1];
     require(yield > 0, "yield must be > 0");
     (bool sent, ) = payable(msg.sender).call{ value: yield }("");
     if (!sent) revert NativeTokenTransferError();

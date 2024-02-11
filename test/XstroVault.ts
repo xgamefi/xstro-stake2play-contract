@@ -126,7 +126,7 @@ describe(CONTRACT_NAME, function () {
         eth2Wei(depositAmountInEth + ethYield)
       );
       expect(await contract.totalStaking()).eq(eth2Wei(depositAmountInEth));
-      expect(await contract.totalYield()).eq(eth2Wei(ethYield));
+      expect((await contract.totalYield())[1]).eq(eth2Wei(ethYield));
     });
   });
   describe("withdrawal", () => {
