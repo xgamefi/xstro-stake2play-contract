@@ -1,14 +1,15 @@
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { ethers } from "hardhat";
-import {
-  ContractTransactionReceipt,
-  ContractTransactionResponse
-} from "ethers";
+import { ContractTransactionReceipt, ContractTransactionResponse, Signer } from "ethers";
 
 export interface IHardhatTestCtx<T> {
   contract: T;
   contractAddress: string;
   accounts: Record<string, HardhatEthersSigner>;
+}
+export interface IGetSignMessage {
+  digest: string;
+  signature: string;
 }
 
 export async function deployContract<T>(
@@ -29,10 +30,21 @@ export async function deployContract<T>(
     }
   };
 }
-export const getFee = async (
-  tx: ContractTransactionResponse
-): Promise<bigint> => {
+export const getFee = async (tx: ContractTransactionResponse): Promise<bigint> => {
   const receipt = (await tx.wait()) as ContractTransactionReceipt;
   return receipt.gasUsed * receipt.gasPrice;
 };
 export const eth2Wei = (eth: number) => ethers.parseEther(eth.toString());
+
+export const packedKeccak256 = (addr: string, amountInEth: number, nonce: number) =>
+  ethers.solidityPackedKeccak256(
+    ["address", "uint256", "uint256"],
+    [addr, eth2Wei(amountInEth), nonce]
+  );
+
+export const getSignMsg = async (signer: Signer, hash: string): Promise<IGetSignMessage> => ({
+  digest: ethers.hashMessage(ethers.toBeArray(hash)),
+  signature: await signer.signMessage(ethers.toBeArray(hash))
+});
+
+export const balance = (addr: string) => ethers.provider.getBalance(addr);

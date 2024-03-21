@@ -9,4 +9,8 @@ contract XstroVaultTestable is XstroVault {
   function withdrawal() public nonReentrant {
     _withdrawal();
   }
+
+  function deposit() public payable nonReentrant {
+    _deposit();
+  }
 }

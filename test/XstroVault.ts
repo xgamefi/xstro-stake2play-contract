@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { deployContract, getFee, eth2Wei } from "./helper";
+import { deployContract, getFee, eth2Wei, balance } from "./helper";
 import { XstroVaultTestable } from "../typechain-types/contracts/testable";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
@@ -18,13 +18,11 @@ describe(CONTRACT_NAME, function () {
   let user1: HardhatEthersSigner;
   let user2: HardhatEthersSigner;
   const notAOwnerErrMsg = "Ownable: caller is not the owner";
-  const balance = (addr: string) => ethers.provider.getBalance(addr);
   const deposit = (signer: HardhatEthersSigner, amountInEth: number) =>
     contract.connect(signer).deposit({
       value: eth2Wei(amountInEth)
     });
-  const withdrawal = (signer: HardhatEthersSigner) =>
-    contract.connect(signer).withdrawal();
+  const withdrawal = (signer: HardhatEthersSigner) => contract.connect(signer).withdrawal();
   const fakeYield = (amountInEth: number) =>
     owner.sendTransaction({
       to: contractAddr,
@@ -45,9 +43,9 @@ describe(CONTRACT_NAME, function () {
     const newInterval = 1234;
     describe("when caller is not the owner", async () => {
       it("should revert", async () => {
-        await expect(
-          contractUser1Calls.setMinWithdrawalInterval(newInterval)
-        ).revertedWith(notAOwnerErrMsg);
+        await expect(contractUser1Calls.setMinWithdrawalInterval(newInterval)).revertedWith(
+          notAOwnerErrMsg
+        );
       });
     });
     describe("when caller is owner", () => {
@@ -61,27 +59,19 @@ describe(CONTRACT_NAME, function () {
   describe("toggleWithdrawal", () => {
     describe("when caller is not the owner", async () => {
       it("should revert", async () => {
-        await expect(contractUser1Calls.setWithdrawalToggle(true)).revertedWith(
-          notAOwnerErrMsg
-        );
+        await expect(contractUser1Calls.setWithdrawalToggle(true)).revertedWith(notAOwnerErrMsg);
       });
     });
     describe("when caller is owner", () => {
       it("should toggle when it's opened", async () => {
         await contractOwnerCalls.setWithdrawalToggle(true);
         expect(await contract.isWithdrawalAllowed()).eq(true);
-        await expect(contractOwnerCalls.setWithdrawalToggle(false)).emit(
-          contract,
-          "WithdrawalOff"
-        );
+        await expect(contractOwnerCalls.setWithdrawalToggle(false)).emit(contract, "WithdrawalOff");
         expect(await contract.isWithdrawalAllowed()).eq(false);
       });
       it("should toggle when it's closed", async () => {
         expect(await contract.isWithdrawalAllowed()).eq(false);
-        await expect(contractOwnerCalls.setWithdrawalToggle(true)).emit(
-          contract,
-          "WithdrawalOn"
-        );
+        await expect(contractOwnerCalls.setWithdrawalToggle(true)).emit(contract, "WithdrawalOn");
         expect(await contract.isWithdrawalAllowed()).eq(true);
       });
     });
@@ -102,11 +92,7 @@ describe(CONTRACT_NAME, function () {
         })
       )
         .emit(contract, "Deposit")
-        .withArgs(
-          user1.address,
-          eth2Wei(depositAmountInEth),
-          eth2Wei(depositAmountInEth)
-        );
+        .withArgs(user1.address, eth2Wei(depositAmountInEth), eth2Wei(depositAmountInEth));
       expect(await balance(contractAddr)).eq(eth2Wei(depositAmountInEth));
       // Verify staking amount
       expect(await contract.totalStaking()).eq(eth2Wei(depositAmountInEth));
@@ -114,6 +100,9 @@ describe(CONTRACT_NAME, function () {
   });
   describe("totalYield", () => {
     const depositAmountInEth = 1.234567;
+    it("should return 0 if it's in intialized state", async () => {
+      expect(await contract.totalStaking()).eq(eth2Wei(0));
+    });
     it("should able to seperate staking and yield amount", async () => {
       expect(await balance(contractAddr)).eq(0);
       await deposit(user1, depositAmountInEth);
@@ -122,57 +111,54 @@ describe(CONTRACT_NAME, function () {
       // Yield
       const ethYield = 0.99;
       await fakeYield(ethYield);
-      expect(await balance(contractAddr)).eq(
-        eth2Wei(depositAmountInEth + ethYield)
-      );
+      expect(await balance(contractAddr)).eq(eth2Wei(depositAmountInEth + ethYield));
       expect(await contract.totalStaking()).eq(eth2Wei(depositAmountInEth));
-      expect((await contract.totalYield())[1]).eq(eth2Wei(ethYield));
+      expect((await contract.totalYield())[2]).eq(eth2Wei(ethYield));
     });
   });
   describe("withdrawal", () => {
     it("should revert if toggle is off", async () => {
-      await expect(contractOwnerCalls.withdrawal()).revertedWith(
-        "withdrawal is off"
-      );
+      await expect(contractOwnerCalls.withdrawal()).revertedWith("withdrawal is off");
     });
     describe("when wwl toggle is on", () => {
       beforeEach(async () => {
         await contractOwnerCalls.setWithdrawalToggle(true);
       });
       it("should revert if user does not stake", async () => {
-        await expect(contractUser1Calls.withdrawal()).revertedWith(
-          "must be staking"
-        );
+        await expect(contractUser1Calls.withdrawal()).revertedWith("must be staking");
       });
-      it("should recieve the deposit amount and emit event if user staked", async () => {
+      describe("when user did staked", () => {
         const depositAmountInEth = 1.234567;
         const ethYield = 0.99;
-        await deposit(user1, depositAmountInEth);
-
-        const beforeWei = await balance(user1.address);
-        // Yield
-        await fakeYield(ethYield);
-        expect(await balance(contractAddr)).eq(
-          eth2Wei(depositAmountInEth + ethYield)
-        );
-        // Withdrawal
-        const tx = await contractUser1Calls.withdrawal();
-        await expect(tx)
-          .emit(contract, "Withdrawal")
-          .withArgs(
-            user1.address,
-            eth2Wei(depositAmountInEth),
-            eth2Wei(ethYield)
-          );
-        const fee = await getFee(tx);
-        const afterEth = await balance(user1.address);
-        const wwlEth = afterEth - beforeWei + fee;
-        // Verify if getting valid amount
-        expect(wwlEth).eq(eth2Wei(depositAmountInEth));
-        // Verify total stake amount
-        expect(await contract.totalStaking()).eq(0);
-        // Verify contract balance
-        expect(await balance(contractAddr)).eq(eth2Wei(ethYield));
+        beforeEach(async () => {
+          await deposit(user1, depositAmountInEth);
+        });
+        it("should revert if staking time is not enough", async () => {
+          const limit = 10000000;
+          await contractOwnerCalls.setMinWithdrawalInterval(limit);
+          const tx = contractUser1Calls.withdrawal();
+          await expect(tx).revertedWith("less than stake threshold");
+        });
+        it("should recieve the deposit amount and emit event if user staked", async () => {
+          const beforeWei = await balance(user1.address);
+          // Yield
+          await fakeYield(ethYield);
+          expect(await balance(contractAddr)).eq(eth2Wei(depositAmountInEth + ethYield));
+          // Withdrawal
+          const tx = await contractUser1Calls.withdrawal();
+          await expect(tx)
+            .emit(contract, "Withdrawal")
+            .withArgs(user1.address, eth2Wei(depositAmountInEth), eth2Wei(ethYield));
+          const fee = await getFee(tx);
+          const afterEth = await balance(user1.address);
+          const wwlEth = afterEth - beforeWei + fee;
+          // Verify if getting valid amount
+          expect(wwlEth).eq(eth2Wei(depositAmountInEth));
+          // Verify total stake amount
+          expect(await contract.totalStaking()).eq(0);
+          // Verify contract balance
+          expect(await balance(contractAddr)).eq(eth2Wei(ethYield));
+        });
       });
     });
   });
@@ -184,18 +170,14 @@ describe(CONTRACT_NAME, function () {
     it("should have data if user deposited", async () => {
       await deposit(user1, depositAmountInEth);
       const latestTimestamp = await time.latest();
-      const [depositAmount, depositTimestamp] = await contract.userStake(
-        user1.address
-      );
+      const [depositAmount, depositTimestamp] = await contract.userStake(user1.address);
       expect(depositAmount).eq(eth2Wei(depositAmountInEth));
       expect(depositTimestamp).eq(latestTimestamp);
     });
     it("should remove data if user withdrawal", async () => {
       await deposit(user1, depositAmountInEth);
       await withdrawal(user1);
-      const [depositAmount, depositTimestamp] = await contract.userStake(
-        user1.address
-      );
+      const [depositAmount, depositTimestamp] = await contract.userStake(user1.address);
       expect(depositAmount).eq(0);
       expect(depositTimestamp).eq(0);
     });
@@ -204,15 +186,11 @@ describe(CONTRACT_NAME, function () {
     const depositAmountInEth = 1.234567;
     const ethYield = 0.99;
     it("should revert if not owner", async () => {
-      await expect(contractUser1Calls.withdrawalYield()).revertedWith(
-        notAOwnerErrMsg
-      );
+      await expect(contractUser1Calls.withdrawalYield()).revertedWith(notAOwnerErrMsg);
     });
     it("should revert if no yield", async () => {
       await deposit(user1, depositAmountInEth);
-      await expect(contractOwnerCalls.withdrawalYield()).revertedWith(
-        "yield must be > 0"
-      );
+      await expect(contractOwnerCalls.withdrawalYield()).revertedWith("yield must be > 0");
     });
     it("should withdrawal yield if it has balance", async () => {
       await deposit(user1, depositAmountInEth);
